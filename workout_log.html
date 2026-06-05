@@ -592,7 +592,7 @@ label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-mu
     <!-- Active workout -->
     <div id="active-state" style="display:none">
       <div class="workout-bar">
-        <input class="workout-name-input" id="w-name" placeholder="Workout Name" value="Morning Workout">
+        <input class="workout-name-input" id="w-name" placeholder="Workout Name" value="">
         <button class="finish-btn" onclick="finishWorkout()">✓ Finish</button>
       </div>
 
@@ -620,9 +620,9 @@ label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-mu
         <!-- Countdown -->
         <div id="cd-panel" style="display:none">
           <div class="cd-input-row" id="cd-inputs">
-            <input type="number" id="cd-min" value="1" min="0" max="99">
+            <input type="number" inputmode="numeric" id="cd-min" value="1" min="0" max="99">
             <span class="cd-sep">:</span>
-            <input type="number" id="cd-sec" value="30" min="0" max="59">
+            <input type="number" inputmode="numeric" id="cd-sec" value="30" min="0" max="59">
           </div>
           <div class="timer-face" id="cd-display" style="display:none">01:30</div>
           <div class="timer-ctrls">
@@ -739,15 +739,15 @@ label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-mu
     </div>
     <div id="str-opts">
       <div class="frow">
-        <div class="fg"><label>Sets</label><input type="number" id="inp-sets" value="3" min="1" max="30"></div>
-        <div class="fg"><label>Reps</label><input type="number" id="inp-reps" value="10" min="1" max="200"></div>
-        <div class="fg"><label id="inp-wt-lbl">Weight (lbs)</label><input type="number" id="inp-wt" value="0" min="0" step="0.5"></div>
+        <div class="fg"><label>Sets</label><input type="number" inputmode="numeric" id="inp-sets" value="3" min="1" max="30"></div>
+        <div class="fg"><label>Reps</label><input type="number" inputmode="numeric" id="inp-reps" value="10" min="1" max="200"></div>
+        <div class="fg"><label id="inp-wt-lbl">Weight (lbs)</label><input type="number" inputmode="decimal" id="inp-wt" value="0" min="0" step="0.5"></div>
       </div>
     </div>
     <div id="car-opts" style="display:none">
       <div class="frow">
-        <div class="fg"><label>Duration (min)</label><input type="number" id="inp-dur" value="30" min="1"></div>
-        <div class="fg"><label id="inp-dist-lbl">Distance (mi)</label><input type="number" id="inp-dist" value="0" min="0" step="0.1"></div>
+        <div class="fg"><label>Duration (min)</label><input type="number" inputmode="decimal" id="inp-dur" value="30" min="1"></div>
+        <div class="fg"><label id="inp-dist-lbl">Distance (mi)</label><input type="number" inputmode="decimal" id="inp-dist" value="0" min="0" step="0.1"></div>
       </div>
     </div>
     <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="addExercise()">Add Exercise</button>
@@ -821,6 +821,11 @@ function save() {
   localStorage.setItem('wl_workouts', JSON.stringify(workouts));
   localStorage.setItem('wl_routines', JSON.stringify(routines));
   localStorage.setItem('wl_settings', JSON.stringify(settings));
+  localStorage.removeItem('wl_draft'); // workout finished — clear draft
+}
+function saveDraft() {
+  if (cw) localStorage.setItem('wl_draft', JSON.stringify(cw));
+  else localStorage.removeItem('wl_draft');
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -856,10 +861,11 @@ function showTab(t) {
    WORKOUT LIFECYCLE
 ════════════════════════════════════════════════════════════ */
 function startWorkout() {
-  cw = { id: Date.now().toString(), date: new Date().toISOString(), name: 'Morning Workout', exercises: [], duration: 0 };
+  cw = { id: Date.now().toString(), date: new Date().toISOString(), name: '', exercises: [], duration: 0 };
   document.getElementById('idle-state').style.display   = 'none';
   document.getElementById('active-state').style.display = 'block';
   renderExercises();
+  saveDraft();
 }
 function finishWorkout() {
   if (!cw) return;
@@ -996,6 +1002,7 @@ function toggleDone(ei, si) {
   const btn = document.getElementById(`c-${ei}-${si}`);
   if (row) row.classList.toggle('done', done);
   if (btn) btn.classList.toggle('done', done);
+  saveDraft();
 }
 
 function syncDOM() {
@@ -1016,6 +1023,7 @@ function syncDOM() {
       if (di) ex.sets[0].distance = parseFloat(di.value) || 0;
     }
   });
+  saveDraft();
 }
 
 function renderExercises() {
@@ -1052,8 +1060,8 @@ function renderExercises() {
       if (prev) body += `<div class="prev-hint">Last: ${prev}</div>`;
       const s = ex.sets[0];
       body += `<div class="frow">
-        <div class="fg"><label>Duration (min)</label><input type="number" id="dur-${ei}" value="${s.duration}" min="0" step="1"  onchange="cw.exercises[${ei}].sets[0].duration=parseFloat(this.value)||0"></div>
-        <div class="fg"><label>Distance (${unit_d})</label><input type="number" id="dis-${ei}" value="${s.distance}" min="0" step="0.1" onchange="cw.exercises[${ei}].sets[0].distance=parseFloat(this.value)||0"></div>
+        <div class="fg"><label>Duration (min)</label><input type="number" inputmode="decimal" id="dur-${ei}" value="${s.duration}" min="0" step="1"  onchange="cw.exercises[${ei}].sets[0].duration=parseFloat(this.value)||0"></div>
+        <div class="fg"><label>Distance (${unit_d})</label><input type="number" inputmode="decimal" id="dis-${ei}" value="${s.distance}" min="0" step="0.1" onchange="cw.exercises[${ei}].sets[0].distance=parseFloat(this.value)||0"></div>
       </div>`;
     }
     div.innerHTML = `
@@ -1614,11 +1622,35 @@ function fmtSec(s) {
 function p(n){ return String(n).padStart(2,'0'); }
 
 /* ════════════════════════════════════════════════════════════
+   DRAFT PERSISTENCE — save the moment you leave the page
+════════════════════════════════════════════════════════════ */
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { syncDOM(); saveDraft(); }
+});
+window.addEventListener('pagehide', () => { syncDOM(); saveDraft(); });
+
+/* ════════════════════════════════════════════════════════════
    BOOT
 ════════════════════════════════════════════════════════════ */
 renderRoutines();
 renderLastSummary();
 renderSettings();
+
+// Restore any in-progress workout that was interrupted
+(function restoreDraft() {
+  const draft = localStorage.getItem('wl_draft');
+  if (!draft) return;
+  try {
+    cw = JSON.parse(draft);
+    document.getElementById('w-name').value = cw.name || '';
+    document.getElementById('idle-state').style.display   = 'none';
+    document.getElementById('active-state').style.display = 'block';
+    renderExercises();
+    toast('Workout restored 💪');
+  } catch(e) {
+    localStorage.removeItem('wl_draft');
+  }
+})();
 </script>
 </body>
 </html>
