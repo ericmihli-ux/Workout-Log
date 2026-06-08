@@ -592,7 +592,7 @@ label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-mu
     <!-- Active workout -->
     <div id="active-state" style="display:none">
       <div class="workout-bar">
-        <input class="workout-name-input" id="w-name" placeholder="Workout Name" value="">
+        <input class="workout-name-input" id="w-name" placeholder="Workout Name" value="Morning Workout">
         <button class="finish-btn" onclick="finishWorkout()">✓ Finish</button>
       </div>
 
@@ -620,9 +620,9 @@ label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-mu
         <!-- Countdown -->
         <div id="cd-panel" style="display:none">
           <div class="cd-input-row" id="cd-inputs">
-            <input type="number" inputmode="numeric" id="cd-min" value="1" min="0" max="99">
+            <input type="number" id="cd-min" value="1" min="0" max="99">
             <span class="cd-sep">:</span>
-            <input type="number" inputmode="numeric" id="cd-sec" value="30" min="0" max="59">
+            <input type="number" id="cd-sec" value="30" min="0" max="59">
           </div>
           <div class="timer-face" id="cd-display" style="display:none">01:30</div>
           <div class="timer-ctrls">
@@ -739,15 +739,15 @@ label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-mu
     </div>
     <div id="str-opts">
       <div class="frow">
-        <div class="fg"><label>Sets</label><input type="number" inputmode="numeric" id="inp-sets" value="3" min="1" max="30"></div>
-        <div class="fg"><label>Reps</label><input type="number" inputmode="numeric" id="inp-reps" value="10" min="1" max="200"></div>
-        <div class="fg"><label id="inp-wt-lbl">Weight (lbs)</label><input type="number" inputmode="decimal" id="inp-wt" value="0" min="0" step="0.5"></div>
+        <div class="fg"><label>Sets</label><input type="number" id="inp-sets" value="3" min="1" max="30"></div>
+        <div class="fg"><label>Reps</label><input type="number" id="inp-reps" value="10" min="1" max="200"></div>
+        <div class="fg"><label id="inp-wt-lbl">Weight (lbs)</label><input type="number" id="inp-wt" value="0" min="0" step="0.5"></div>
       </div>
     </div>
     <div id="car-opts" style="display:none">
       <div class="frow">
-        <div class="fg"><label>Duration (min)</label><input type="number" inputmode="decimal" id="inp-dur" value="30" min="1"></div>
-        <div class="fg"><label id="inp-dist-lbl">Distance (mi)</label><input type="number" inputmode="decimal" id="inp-dist" value="0" min="0" step="0.1"></div>
+        <div class="fg"><label>Duration (min)</label><input type="number" id="inp-dur" value="30" min="1"></div>
+        <div class="fg"><label id="inp-dist-lbl">Distance (mi)</label><input type="number" id="inp-dist" value="0" min="0" step="0.1"></div>
       </div>
     </div>
     <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="addExercise()">Add Exercise</button>
@@ -821,17 +821,13 @@ function save() {
   localStorage.setItem('wl_workouts', JSON.stringify(workouts));
   localStorage.setItem('wl_routines', JSON.stringify(routines));
   localStorage.setItem('wl_settings', JSON.stringify(settings));
-  localStorage.removeItem('wl_draft'); // workout finished — clear draft
-}
-function saveDraft() {
-  if (cw) localStorage.setItem('wl_draft', JSON.stringify(cw));
-  else localStorage.removeItem('wl_draft');
 }
 
 /* ════════════════════════════════════════════════════════════
    STATE
 ════════════════════════════════════════════════════════════ */
 let cw = null;           // current workout
+let cwStart = null;      // workout start timestamp (background timer)
 let editWorkout = null;  // workout being edited
 let addExTarget = 'live';// 'live' | 'edit'
 let exType = 'strength'; // add-exercise modal type
@@ -861,24 +857,26 @@ function showTab(t) {
    WORKOUT LIFECYCLE
 ════════════════════════════════════════════════════════════ */
 function startWorkout() {
-  cw = { id: Date.now().toString(), date: new Date().toISOString(), name: '', exercises: [], duration: 0 };
+  cw = { id: Date.now().toString(), date: new Date().toISOString(), name: 'Morning Workout', exercises: [], duration: 0 };
+  cwStart = Date.now();
   document.getElementById('idle-state').style.display   = 'none';
   document.getElementById('active-state').style.display = 'block';
   renderExercises();
-  saveDraft();
 }
 function finishWorkout() {
   if (!cw) return;
   if (cw.exercises.length === 0 && !confirm('No exercises logged. Finish anyway?')) return;
   cw.name = document.getElementById('w-name').value.trim() || 'Workout';
+  cw.duration = cwStart ? Math.floor((Date.now() - cwStart) / 1000) : 0;
   syncDOM();
   workouts.unshift(cw);
   save();
-  cw = null;
+  const durStr = cw.duration ? ` · ${fmtSec(cw.duration)}` : '';
+  cw = null; cwStart = null;
   document.getElementById('active-state').style.display = 'none';
   document.getElementById('idle-state').style.display   = 'block';
   renderLastSummary();
-  toast('Workout saved! 💪');
+  toast(`Workout saved! 💪${durStr}`);
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -1002,7 +1000,6 @@ function toggleDone(ei, si) {
   const btn = document.getElementById(`c-${ei}-${si}`);
   if (row) row.classList.toggle('done', done);
   if (btn) btn.classList.toggle('done', done);
-  saveDraft();
 }
 
 function syncDOM() {
@@ -1023,7 +1020,6 @@ function syncDOM() {
       if (di) ex.sets[0].distance = parseFloat(di.value) || 0;
     }
   });
-  saveDraft();
 }
 
 function renderExercises() {
@@ -1060,8 +1056,8 @@ function renderExercises() {
       if (prev) body += `<div class="prev-hint">Last: ${prev}</div>`;
       const s = ex.sets[0];
       body += `<div class="frow">
-        <div class="fg"><label>Duration (min)</label><input type="number" inputmode="decimal" id="dur-${ei}" value="${s.duration}" min="0" step="1"  onchange="cw.exercises[${ei}].sets[0].duration=parseFloat(this.value)||0"></div>
-        <div class="fg"><label>Distance (${unit_d})</label><input type="number" inputmode="decimal" id="dis-${ei}" value="${s.distance}" min="0" step="0.1" onchange="cw.exercises[${ei}].sets[0].distance=parseFloat(this.value)||0"></div>
+        <div class="fg"><label>Duration (min)</label><input type="number" id="dur-${ei}" value="${s.duration}" min="0" step="1"  onchange="cw.exercises[${ei}].sets[0].duration=parseFloat(this.value)||0"></div>
+        <div class="fg"><label>Distance (${unit_d})</label><input type="number" id="dis-${ei}" value="${s.distance}" min="0" step="0.1" onchange="cw.exercises[${ei}].sets[0].distance=parseFloat(this.value)||0"></div>
       </div>`;
     }
     div.innerHTML = `
@@ -1207,6 +1203,7 @@ function renderLastSummary() {
     <div class="card" onclick="showTab('history')" style="cursor:pointer">
       <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:10px">
         <div><div style="font-weight:700;font-size:.97rem">${w.name}</div><div style="font-size:.76rem;color:var(--text-muted)">${ds}</div></div>
+        ${w.duration?`<div style="font-size:.78rem;color:var(--text-muted)">⏱ ${fmtSec(w.duration)}</div>`:''}
       </div>
       <div class="stats-row">
         <div class="stat-chip"><div class="stat-val">${w.exercises.length}</div><div class="stat-lbl">Exercises</div></div>
@@ -1369,6 +1366,7 @@ function renderHistory() {
       <div class="hist-name">${w.name}</div>
       <div class="hist-meta">
         <span>💪 ${n} exercise${n!==1?'s':''}</span>
+        ${w.duration?`<span>⏱ ${fmtSec(w.duration)}</span>`:''}
       </div>
     </div>`;
   }).join('');
@@ -1380,7 +1378,7 @@ function showDetail(id) {
   const d = new Date(w.date);
   const ds = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
   document.getElementById('det-title').value = w.name;
-  let html = `<p style="font-size:.8rem;color:var(--text-muted);margin-bottom:14px">${ds}</p>`;
+  let html = `<p style="font-size:.8rem;color:var(--text-muted);margin-bottom:14px">${ds}${w.duration ? ` · ⏱ ${fmtSec(w.duration)}` : ''}</p>`;
   w.exercises.forEach(ex => {
     html += `<div class="det-ex"><div class="det-ex-name">${ex.name}
       <span class="type-badge badge-${ex.type}" style="font-size:.62rem">${ex.type}</span></div><div class="det-sets">`;
@@ -1532,6 +1530,29 @@ function exportCSV() {
 }
 
 /* ════════════════════════════════════════════════════════════
+   AUDIO ALERTS
+════════════════════════════════════════════════════════════ */
+function playBeeps() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Three beeps: two short, one long higher-pitched
+    [[880, 0, 0.25], [880, 0.35, 0.25], [1100, 0.7, 0.6]].forEach(([freq, when, dur]) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const t = ctx.currentTime + when;
+      gain.gain.setValueAtTime(0.45, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      osc.start(t);
+      osc.stop(t + dur);
+    });
+  } catch(e) {}
+}
+
+/* ════════════════════════════════════════════════════════════
    STOPWATCH
 ════════════════════════════════════════════════════════════ */
 function swToggle() {
@@ -1582,8 +1603,12 @@ function cdToggle() {
     cdIv=setInterval(()=>{
       cdRem--;
       document.getElementById('cd-display').textContent = cdRem>0 ? fmtSec(cdRem) : 'Done! 🔔';
-      if (cdRem<=0) { clearInterval(cdIv); cdRun=false; cdStarted=false; document.getElementById('cd-btn').textContent='Start';
-        setTimeout(cdReset,3000); }
+      if (cdRem<=0) {
+        clearInterval(cdIv); cdRun=false; cdStarted=false;
+        document.getElementById('cd-btn').textContent='Start';
+        playBeeps();
+        setTimeout(cdReset, 3000);
+      }
     },1000);
     document.getElementById('cd-btn').textContent='Pause';
   }
@@ -1622,35 +1647,11 @@ function fmtSec(s) {
 function p(n){ return String(n).padStart(2,'0'); }
 
 /* ════════════════════════════════════════════════════════════
-   DRAFT PERSISTENCE — save the moment you leave the page
-════════════════════════════════════════════════════════════ */
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') { syncDOM(); saveDraft(); }
-});
-window.addEventListener('pagehide', () => { syncDOM(); saveDraft(); });
-
-/* ════════════════════════════════════════════════════════════
    BOOT
 ════════════════════════════════════════════════════════════ */
 renderRoutines();
 renderLastSummary();
 renderSettings();
-
-// Restore any in-progress workout that was interrupted
-(function restoreDraft() {
-  const draft = localStorage.getItem('wl_draft');
-  if (!draft) return;
-  try {
-    cw = JSON.parse(draft);
-    document.getElementById('w-name').value = cw.name || '';
-    document.getElementById('idle-state').style.display   = 'none';
-    document.getElementById('active-state').style.display = 'block';
-    renderExercises();
-    toast('Workout restored 💪');
-  } catch(e) {
-    localStorage.removeItem('wl_draft');
-  }
-})();
 </script>
 </body>
 </html>
