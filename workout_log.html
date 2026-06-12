@@ -489,6 +489,18 @@ label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-mu
 }
 .routine-del-btn:active { color: var(--danger); }
 
+/* ── Plan mode indicator ── */
+.plan-mode-indicator {
+  background: rgba(255,255,255,.25);
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* ── Recent exercise chips ── */
 .ex-chip {
   display: inline-flex;
@@ -528,6 +540,22 @@ label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-mu
   pointer-events: none;
 }
 .toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ── Restore banner ── */
+.restore-banner {
+  background: #fef3c7;
+  border: 1.5px solid #f59e0b;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  color: #78350f;
+  font-size: .9rem;
+}
+.restore-banner .restore-title { font-weight: 700; margin-bottom: 2px; }
+.restore-banner .restore-sub { font-size: .78rem; opacity: .8; margin-bottom: 10px; }
+.restore-btn-row { display: flex; gap: 8px; }
+.btn-restore { background: #f59e0b; color: #fff; border: none; border-radius: 10px; padding: 10px 16px; font-size: .92rem; font-weight: 700; cursor: pointer; flex: 2; min-height: 44px; touch-action: manipulation; }
+.btn-restore:active { opacity: .8; }
 </style>
 </head>
 <body>
@@ -574,6 +602,15 @@ label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-mu
 
     <!-- No workout -->
     <div id="idle-state">
+      <!-- Restore banner (shown when unfinished workout is found) -->
+      <div id="restore-banner" style="display:none" class="restore-banner">
+        <div class="restore-title">📱 Unfinished workout found</div>
+        <div class="restore-sub">You may have switched apps. Your exercises are saved.</div>
+        <div class="restore-btn-row">
+          <button class="btn-restore" onclick="restoreWorkout()">▶ Resume Workout</button>
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="dismissRestore()">Discard</button>
+        </div>
+      </div>
       <div class="start-area">
         <svg width="82" height="82" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 14px;display:block">
           <path d="M6 4v16M18 4v16M3 9h3M18 9h3M3 15h3M18 15h3M6 9h12M6 15h12"/>
@@ -584,6 +621,9 @@ label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-mu
           <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           Start Workout
         </button>
+        <button class="btn btn-ghost btn-full" style="margin-top:9px" onclick="planWorkout()">
+          📝 Plan Workout First
+        </button>
       </div>
       <div id="routines-section"></div>
       <div id="last-summary"></div>
@@ -592,8 +632,12 @@ label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-mu
     <!-- Active workout -->
     <div id="active-state" style="display:none">
       <div class="workout-bar">
-        <input class="workout-name-input" id="w-name" placeholder="Workout Name" value="Morning Workout">
-        <button class="finish-btn" onclick="finishWorkout()">✓ Finish</button>
+        <div id="plan-lbl" style="display:none" class="plan-mode-indicator">📋 PLAN</div>
+        <input class="workout-name-input" id="w-name" placeholder="Workout Name" value="Morning Workout" oninput="if(cw){cw.name=this.value;saveActive();}">
+        <button class="finish-btn" id="wb-btn" onclick="handleWbBtn()">✓ Finish</button>
+      </div>
+      <div id="plan-actions" style="display:none;text-align:center;margin:-4px 0 6px">
+        <button onclick="discardPlan()" style="background:none;border:none;color:var(--text-muted);font-size:.82rem;padding:5px 14px;cursor:pointer;touch-action:manipulation">Discard plan ✕</button>
       </div>
 
       <div id="exercises-list"></div>
@@ -791,6 +835,25 @@ label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-mu
   </div>
 </div>
 
+<!-- ═══════════════════════ ROUTINE PREVIEW MODAL ═══════════════════════ -->
+<div class="overlay hidden" id="routine-preview-modal" onclick="overlayClick(event,'routine-preview-modal')">
+  <div class="modal">
+    <div class="modal-hdr">
+      <span class="modal-title" id="rp-title">Routine</span>
+      <button class="modal-close" onclick="closeModal('routine-preview-modal')">×</button>
+    </div>
+    <div id="rp-body" style="margin-bottom:16px"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="planFromRoutine(previewRoutineId)">📝 Plan &amp; Edit</button>
+      <button class="btn btn-primary btn-sm" style="flex:2" onclick="startFromRoutinePreview()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Start Workout
+      </button>
+    </div>
+    <button class="btn btn-ghost btn-sm btn-full" style="margin-top:8px;color:var(--text-muted)" onclick="closeModal('routine-preview-modal')">Cancel</button>
+  </div>
+</div>
+
 <!-- ═══════════════════════ SAVE ROUTINE MODAL ═══════════════════════ -->
 <div class="overlay hidden" id="routine-modal" onclick="overlayClick(event,'routine-modal')">
   <div class="modal">
@@ -822,16 +885,26 @@ function save() {
   localStorage.setItem('wl_routines', JSON.stringify(routines));
   localStorage.setItem('wl_settings', JSON.stringify(settings));
 }
+// Persist active workout so app-switching doesn't lose data
+function saveActive() {
+  if (!cw) return;
+  localStorage.setItem('wl_active', JSON.stringify({ cw, cwStart, cwPlanning }));
+}
+function clearActive() {
+  localStorage.removeItem('wl_active');
+}
 
 /* ════════════════════════════════════════════════════════════
    STATE
 ════════════════════════════════════════════════════════════ */
 let cw = null;           // current workout
 let cwStart = null;      // workout start timestamp (background timer)
+let cwPlanning = false;  // true = building plan before starting timer
 let editWorkout = null;  // workout being edited
 let addExTarget = 'live';// 'live' | 'edit'
 let exType = 'strength'; // add-exercise modal type
 let detId = null;        // workout shown in detail modal
+let previewRoutineId = null; // routine shown in preview modal
 let progChart = null;
 let chartMetric = 'volume';
 
@@ -858,10 +931,63 @@ function showTab(t) {
 ════════════════════════════════════════════════════════════ */
 function startWorkout() {
   cw = { id: Date.now().toString(), date: new Date().toISOString(), name: 'Morning Workout', exercises: [], duration: 0 };
+  cwPlanning = false;
   cwStart = Date.now();
+  document.getElementById('w-name').value = cw.name;
   document.getElementById('idle-state').style.display   = 'none';
   document.getElementById('active-state').style.display = 'block';
+  updateWorkoutBar();
   renderExercises();
+  saveActive();
+}
+function planWorkout() {
+  cw = { id: Date.now().toString(), date: new Date().toISOString(), name: 'Morning Workout', exercises: [], duration: 0 };
+  cwPlanning = true;
+  cwStart = null;
+  document.getElementById('w-name').value = cw.name;
+  document.getElementById('idle-state').style.display   = 'none';
+  document.getElementById('active-state').style.display = 'block';
+  updateWorkoutBar();
+  renderExercises();
+  saveActive();
+}
+function beginWorkout() {
+  if (!cw) return;
+  cw.name = document.getElementById('w-name').value.trim() || 'Morning Workout';
+  cwPlanning = false;
+  cwStart = Date.now();
+  updateWorkoutBar();
+  saveActive();
+  toast('Workout started! 💪');
+}
+function discardPlan() {
+  if (!confirm('Discard this plan?')) return;
+  cwPlanning = false;
+  cw = null;
+  cwStart = null;
+  clearActive();
+  document.getElementById('active-state').style.display = 'none';
+  document.getElementById('idle-state').style.display   = 'block';
+  renderRoutines();
+}
+function handleWbBtn() {
+  if (cwPlanning) beginWorkout();
+  else finishWorkout();
+}
+function updateWorkoutBar() {
+  const btn = document.getElementById('wb-btn');
+  const lbl = document.getElementById('plan-lbl');
+  const planActions = document.getElementById('plan-actions');
+  if (!btn) return;
+  if (cwPlanning) {
+    btn.textContent = '▶ Begin';
+    lbl.style.display = 'block';
+    planActions.style.display = 'block';
+  } else {
+    btn.textContent = '✓ Finish';
+    lbl.style.display = 'none';
+    planActions.style.display = 'none';
+  }
 }
 function finishWorkout() {
   if (!cw) return;
@@ -873,6 +999,7 @@ function finishWorkout() {
   save();
   const durStr = cw.duration ? ` · ${fmtSec(cw.duration)}` : '';
   cw = null; cwStart = null;
+  clearActive();
   document.getElementById('active-state').style.display = 'none';
   document.getElementById('idle-state').style.display   = 'block';
   renderLastSummary();
@@ -976,14 +1103,16 @@ function addExercise() {
     cw.exercises.push(ex);
     closeModal('add-ex-modal');
     renderExercises();
+    saveActive();
   }
 }
-function removeEx(i) { syncDOM(); cw.exercises.splice(i,1); renderExercises(); }
+function removeEx(i) { syncDOM(); cw.exercises.splice(i,1); renderExercises(); saveActive(); }
 function addSet(ei) {
   syncDOM();
   const ex = cw.exercises[ei], last = ex.sets.at(-1);
   ex.sets.push({ weight: last.weight, reps: last.reps, completed: false });
   renderExercises();
+  saveActive();
 }
 function removeSet(ei, si) {
   syncDOM();
@@ -991,6 +1120,7 @@ function removeSet(ei, si) {
   if (ex.sets.length <= 1) return;
   ex.sets.splice(si, 1);
   renderExercises();
+  saveActive();
 }
 function toggleDone(ei, si) {
   const ex = cw.exercises[ei];
@@ -1000,6 +1130,7 @@ function toggleDone(ei, si) {
   const btn = document.getElementById(`c-${ei}-${si}`);
   if (row) row.classList.toggle('done', done);
   if (btn) btn.classList.toggle('done', done);
+  saveActive();
 }
 
 function syncDOM() {
@@ -1097,14 +1228,14 @@ function renderRoutines() {
   const cards = routines.map(r => {
     const exList = r.exercises.map(e => e.name).join(' · ');
     const count = r.exercises.length;
-    return `<div class="routine-card">
+    return `<div class="routine-card" onclick="previewRoutine('${r.id}')" style="cursor:pointer">
       <div class="routine-icon">📋</div>
       <div class="routine-info">
         <div class="routine-name">${r.name}</div>
         <div class="routine-meta">${count} exercise${count!==1?'s':''} · ${exList}</div>
       </div>
-      <button class="routine-start-btn" onclick="startFromRoutine('${r.id}')">▶ Start</button>
-      <button class="routine-del-btn" onclick="deleteRoutine('${r.id}')" title="Remove routine">×</button>
+      <button class="routine-start-btn" onclick="event.stopPropagation();previewRoutine('${r.id}')">▶ Start</button>
+      <button class="routine-del-btn" onclick="event.stopPropagation();deleteRoutine('${r.id}')" title="Remove routine">×</button>
     </div>`;
   }).join('');
   el.innerHTML = `<div class="sec-lbl">Your Routines</div>${cards}`;
@@ -1183,6 +1314,70 @@ function deleteRoutine(routineId) {
   save();
   renderRoutines();
   toast('Routine removed');
+}
+
+function previewRoutine(routineId) {
+  const r = routines.find(x => x.id === routineId);
+  if (!r) return;
+  previewRoutineId = routineId;
+  document.getElementById('rp-title').textContent = r.name;
+  const u = settings.units === 'metric' ? 'kg' : 'lbs';
+  const ud = settings.units === 'metric' ? 'km' : 'mi';
+  let html = '';
+  r.exercises.forEach(ex => {
+    // Pull latest weight from history for display
+    let dispWeight = ex.weight, dispReps = ex.reps;
+    if (ex.type === 'strength') {
+      for (const w of workouts) {
+        const found = w.exercises.find(e => e.name.toLowerCase() === ex.name.toLowerCase() && e.type === 'strength');
+        if (found) { dispWeight = found.sets[0].weight; dispReps = found.sets[0].reps; break; }
+      }
+    }
+    html += `<div class="det-ex">
+      <div class="det-ex-name">${ex.name}
+        <span class="type-badge badge-${ex.type}" style="font-size:.62rem">${ex.type}</span>
+      </div><div class="det-sets">`;
+    if (ex.type === 'strength') {
+      for (let i = 0; i < ex.sets; i++) {
+        html += `<div class="det-set-chip">Set ${i+1}: ${dispWeight}${u} × ${dispReps}</div>`;
+      }
+    } else {
+      html += `<div class="det-set-chip">${ex.duration} min${ex.distance ? ` · ${ex.distance}${ud}` : ''}</div>`;
+    }
+    html += `</div></div>`;
+  });
+  document.getElementById('rp-body').innerHTML = html || '<p style="color:var(--text-muted);font-size:.88rem">No exercises in this routine yet.</p>';
+  openModal('routine-preview-modal');
+}
+
+function startFromRoutinePreview() {
+  closeModal('routine-preview-modal');
+  if (previewRoutineId) startFromRoutine(previewRoutineId);
+}
+
+function planFromRoutine(routineId) {
+  const r = routines.find(x => x.id === routineId);
+  if (!r) return;
+  closeModal('routine-preview-modal');
+  planWorkout();
+  document.getElementById('w-name').value = r.name;
+  cw.name = r.name;
+  cw.exercises = r.exercises.map(ex => {
+    const sets = [];
+    if (ex.type === 'strength') {
+      let latestWeight = ex.weight, latestReps = ex.reps;
+      for (const w of workouts) {
+        const found = w.exercises.find(e => e.name.toLowerCase() === ex.name.toLowerCase() && e.type === 'strength');
+        if (found) { latestWeight = found.sets[0].weight; latestReps = found.sets[0].reps; break; }
+      }
+      for (let i = 0; i < ex.sets; i++) sets.push({ weight: latestWeight, reps: latestReps, completed: false });
+    } else {
+      sets.push({ duration: ex.duration, distance: ex.distance });
+    }
+    return { id: Date.now().toString() + Math.random(), name: ex.name, type: ex.type, sets };
+  });
+  renderExercises();
+  toast(`Planning ${r.name} — adjust then tap ▶ Begin`);
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -1647,11 +1842,61 @@ function fmtSec(s) {
 function p(n){ return String(n).padStart(2,'0'); }
 
 /* ════════════════════════════════════════════════════════════
+   RESTORE IN-PROGRESS WORKOUT
+════════════════════════════════════════════════════════════ */
+function checkForRestore() {
+  const raw = localStorage.getItem('wl_active');
+  if (!raw) return;
+  try {
+    JSON.parse(raw); // validate
+    document.getElementById('restore-banner').style.display = 'block';
+  } catch(e) {
+    localStorage.removeItem('wl_active');
+  }
+}
+function restoreWorkout() {
+  const raw = localStorage.getItem('wl_active');
+  if (!raw) return;
+  try {
+    const saved = JSON.parse(raw);
+    cw = saved.cw;
+    cwStart = saved.cwStart;
+    cwPlanning = saved.cwPlanning || false;
+    document.getElementById('restore-banner').style.display = 'none';
+    document.getElementById('w-name').value = cw.name;
+    document.getElementById('idle-state').style.display   = 'none';
+    document.getElementById('active-state').style.display = 'block';
+    updateWorkoutBar();
+    renderExercises();
+    toast('Workout restored! 💪');
+  } catch(e) {
+    localStorage.removeItem('wl_active');
+    toast('Could not restore workout');
+  }
+}
+function dismissRestore() {
+  if (!confirm('Discard the unfinished workout?')) return;
+  clearActive();
+  document.getElementById('restore-banner').style.display = 'none';
+}
+
+/* ════════════════════════════════════════════════════════════
    BOOT
 ════════════════════════════════════════════════════════════ */
 renderRoutines();
 renderLastSummary();
 renderSettings();
+checkForRestore();
+
+// Auto-save active workout every 4 seconds as a safety net
+setInterval(() => { if (cw) { syncDOM(); saveActive(); } }, 4000);
+
+// Save immediately when the user switches apps or the page hides
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && cw) { syncDOM(); saveActive(); }
+});
+window.addEventListener('pagehide', () => { if (cw) { syncDOM(); saveActive(); } });
+window.addEventListener('beforeunload', () => { if (cw) { syncDOM(); saveActive(); } });
 </script>
 </body>
 </html>
