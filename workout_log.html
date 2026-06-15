@@ -654,8 +654,9 @@ label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-mu
         <input class="workout-name-input" id="w-name" placeholder="Workout Name" value="Morning Workout" oninput="if(cw){cw.name=this.value;saveActive();}">
         <button class="finish-btn" id="wb-btn" onclick="handleWbBtn()">✓ Finish</button>
       </div>
-      <div id="plan-actions" style="display:none;text-align:center;margin:-4px 0 6px">
-        <button onclick="discardPlan()" style="background:none;border:none;color:var(--text-muted);font-size:.82rem;padding:5px 14px;cursor:pointer;touch-action:manipulation">Discard plan ✕</button>
+      <div id="plan-actions" style="display:none;justify-content:center;gap:4px;margin:-4px 0 6px">
+        <button onclick="saveCurrentPlanAsRoutine()" style="background:none;border:none;color:var(--text-muted);font-size:.82rem;padding:5px 14px;cursor:pointer;touch-action:manipulation">⭐ Save as Routine</button>
+        <button onclick="discardPlan()" style="background:none;border:none;color:var(--text-muted);font-size:.82rem;padding:5px 14px;cursor:pointer;touch-action:manipulation">Discard ✕</button>
       </div>
 
       <div id="exercises-list"></div>
@@ -923,6 +924,7 @@ let addExTarget = 'live';// 'live' | 'edit'
 let exType = 'strength'; // add-exercise modal type
 let detId = null;        // workout shown in detail modal
 let previewRoutineId = null; // routine shown in preview modal
+let routineSource = 'history'; // 'history' | 'plan' — where saveAsRoutine was triggered from
 let progChart = null;
 let chartMetric = 'volume';
 
@@ -1000,7 +1002,7 @@ function updateWorkoutBar() {
   if (cwPlanning) {
     btn.textContent = '▶ Begin';
     lbl.style.display = 'block';
-    planActions.style.display = 'block';
+    planActions.style.display = 'flex';
   } else {
     btn.textContent = '✓ Finish';
     lbl.style.display = 'none';
@@ -1262,7 +1264,19 @@ function renderRoutines() {
 function saveAsRoutine() {
   const w = workouts.find(x => x.id === detId);
   if (!w) return;
+  routineSource = 'history';
   document.getElementById('routine-name-inp').value = w.name;
+  openModal('routine-modal');
+  setTimeout(() => document.getElementById('routine-name-inp').select(), 120);
+}
+
+function saveCurrentPlanAsRoutine() {
+  if (!cw) return;
+  syncDOM();
+  if (!cw.exercises.length) { toast('Add at least one exercise first'); return; }
+  cw.name = document.getElementById('w-name').value.trim() || 'Morning Workout';
+  routineSource = 'plan';
+  document.getElementById('routine-name-inp').value = cw.name;
   openModal('routine-modal');
   setTimeout(() => document.getElementById('routine-name-inp').select(), 120);
 }
@@ -1270,8 +1284,8 @@ function saveAsRoutine() {
 function confirmSaveRoutine() {
   const name = document.getElementById('routine-name-inp').value.trim();
   if (!name) { toast('Enter a routine name'); return; }
-  const w = workouts.find(x => x.id === detId);
-  if (!w) return;
+  const sourceWorkout = routineSource === 'plan' ? cw : workouts.find(x => x.id === detId);
+  if (!sourceWorkout) return;
   // Check for duplicate name
   const exists = routines.find(r => r.name.toLowerCase() === name.toLowerCase());
   if (exists) {
@@ -1281,11 +1295,10 @@ function confirmSaveRoutine() {
   const routine = {
     id: Date.now().toString(),
     name,
-    exercises: w.exercises.map(ex => ({
+    exercises: sourceWorkout.exercises.map(ex => ({
       name: ex.name,
       type: ex.type,
       sets: ex.sets.length,
-      // use first set's values as the template
       weight: ex.type === 'strength' ? ex.sets[0].weight : 0,
       reps:   ex.type === 'strength' ? ex.sets[0].reps   : 0,
       duration: ex.type === 'cardio' ? ex.sets[0].duration : 0,
@@ -1295,7 +1308,8 @@ function confirmSaveRoutine() {
   routines.unshift(routine);
   save();
   closeModal('routine-modal');
-  closeModal('det-modal');
+  if (routineSource === 'history') closeModal('det-modal');
+  routineSource = 'history';
   renderRoutines();
   toast(`Routine "${name}" saved! ⭐`);
 }
